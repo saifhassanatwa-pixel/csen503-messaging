@@ -6,9 +6,9 @@ import { createGroup, getGroups, getGroupMembers, sendToGroup } from "../server/
 for (const name of ["ali", "sara", "omar"]) registerUser(name, "1234");
 
 const groupName = "team-" + Date.now();          // new name each run
-console.log("create group (ok: true):", createGroup(groupName, "ali", ["sara", "omar"]));
-console.log("create same group again (ok: false):", createGroup(groupName, "ali", []));
-console.log("group with unknown user (ok: false):", createGroup(groupName + "x", "ali", ["nobody"]));
+console.log("create group (true):", createGroup(groupName, "ali", ["sara", "omar"]));
+console.log("create same group again (false):", createGroup(groupName, "ali", []));
+console.log("group with unknown user (false):", createGroup(groupName + "x", "ali", ["nobody"]));
 console.log("members:", getGroupMembers(groupName));
 console.log("ali's groups include it:", getGroups("ali").includes(groupName));
 

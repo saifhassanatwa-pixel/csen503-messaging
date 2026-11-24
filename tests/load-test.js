@@ -5,7 +5,11 @@
 //   node tests/load-test.js 5 20 json private
 //   node tests/load-test.js 20 20 text group
 import WebSocket from "ws";
-import { getProtocol } from "../protocols/index.js";
+import { load } from "../server/loader.js";
+import * as fallbacks from "../server/fallbacks.js";
+
+// Member 3's protocols if they exist yet, otherwise member 1's temporary JSON stand-in
+const { getProtocol } = await load("../protocols/index.js", fallbacks.protocols);
 
 const CLIENTS = Number(process.argv[2] || 5);
 const MESSAGES = Number(process.argv[3] || 20);
@@ -58,7 +62,7 @@ const clients = [];
 for (let i = 0; i < CLIENTS; i++) clients.push(await startClient(i));
 
 // Group mode: client 0 makes one group containing everybody
-const groupName = RUN + "-group";
+const groupName = RUN + "_g";                  // letters, digits, _ only (member 1's name rule)
 if (MODE === "group") {
   clients[0].send({ type: "create_group", group: groupName, body: clients.map(c => c.user).join(",") });
   await clients[0].waitFor("groups", "error");

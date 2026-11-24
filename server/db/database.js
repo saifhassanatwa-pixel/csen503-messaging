@@ -26,16 +26,22 @@ function hashPassword(password, salt) {
   return scryptSync(password, salt, 64).toString("hex");
 }
 
-// Register a new user. Returns { ok: true } or { ok: false, error: "..." }
+// Turn a database row into the same message shape the protocols use (from, to, group, ts)
+function toMessage(row) {
+  return { type: "chat", id: row.id, from: row.sender, to: row.receiver || "",
+           group: row.group_name || "", ts: row.sent_at, body: row.body };
+}
+
+// Register a new user. Returns true if created, false if the name is taken or empty.
 export function registerUser(username, password) {
-  if (!username || !password) return { ok: false, error: "Username and password required" };
+  if (!username || !password) return false;
   const salt = randomBytes(16).toString("hex");
   try {
     db.prepare("INSERT INTO users (username, password_hash, salt, created_at) VALUES (?, ?, ?, ?)")
       .run(username, hashPassword(password, salt), salt, Date.now());
-    return { ok: true };
+    return true;
   } catch {
-    return { ok: false, error: "Username already taken" };   // PRIMARY KEY blocked a duplicate name
+    return false;                               // PRIMARY KEY blocked a duplicate name
   }
 }
 
@@ -48,9 +54,9 @@ export function checkLogin(username, password) {
 }
 
 // Save a message once, plus one delivery row per receiver.
-// receivers = list of usernames who should get it (1 person, or every group member except sender).
+// receivers = who should get it; for a private message it defaults to the one person in msg.to.
 // Returns true if saved, false if this id was already saved (a duplicate resend).
-export function saveMessage(msg, receivers) {
+export function saveMessage(msg, receivers = msg.to ? [msg.to] : []) {
   db.exec("BEGIN");                             // message + its delivery rows are saved together, or not at all
   try {
     const result = insertMessage.run(msg.id, msg.from, msg.to || null, msg.group || null,
@@ -81,7 +87,7 @@ export function getUndelivered(username) {
      JOIN deliveries d ON d.message_id = m.id
      WHERE d.username = ? AND d.delivered = 0
      ORDER BY m.sent_at`
-  ).all(username);
+  ).all(username).map(toMessage);
 }
 
 // Full chat history for a user: everything they sent or were meant to receive, oldest first
@@ -91,7 +97,7 @@ export function getHistory(username) {
      LEFT JOIN deliveries d ON d.message_id = m.id
      WHERE m.sender = ? OR d.username = ?
      ORDER BY m.sent_at`
-  ).all(username, username);
+  ).all(username, username).map(toMessage);
 }
 
 // Let other files (groups.js) run their own queries on the same connection

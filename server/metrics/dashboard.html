@@ -30,7 +30,7 @@
       ["Bytes / second", s => s.bytesPerSecond, () => "average over last 5 s"],
       ["Total messages", s => s.totalMessages, s => `json ${s.messagesByProtocol.json} · text ${s.messagesByProtocol.text}`],
       ["Avg message size (bytes)", s => `${s.avgMessageBytes.json} / ${s.avgMessageBytes.text}`, () => "json / text"],
-      ["Avg latency (ms)", s => s.avgLatencyMs ?? "—", () => "send time → server"],
+      ["Avg server time (ms)", s => s.avgProcessingMs ?? "—", () => "time to save + forward one message"],
       ["Uptime", s => formatTime(s.uptimeSeconds), s => `${(s.totalBytes / 1024).toFixed(1)} KB received`],
     ];
 

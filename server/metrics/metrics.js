@@ -1,8 +1,5 @@
 // metrics.js : live server statistics for monitoring and for the report (owner: member 4)
 // Member 1's server calls onConnect / onDisconnect / onMessage; the dashboard reads getStats().
-import { fileURLToPath } from "node:url";
-
-const DASHBOARD_FILE = fileURLToPath(new URL("./dashboard.html", import.meta.url));
 
 const startedAt = Date.now();
 const WINDOW_MS = 5000;                 // rates are averaged over the last 5 seconds
@@ -15,8 +12,8 @@ const connectionsByProtocol = { json: 0, text: 0 };
 const messagesByProtocol = { json: 0, text: 0 };
 const bytesByProtocol = { json: 0, text: 0 };
 const recent = [];                      // { time, bytes } of messages in the last WINDOW_MS
-let latencySum = 0;
-let latencyCount = 0;
+let processingSum = 0;
+let processingCount = 0;
 
 // Drop entries older than the window, so rates only count recent traffic
 function trimWindow(now) {
@@ -36,9 +33,9 @@ export function onDisconnect(protocol) {
   if (protocol in connectionsByProtocol) connectionsByProtocol[protocol] = Math.max(0, connectionsByProtocol[protocol] - 1);
 }
 
-// The server received one message. bytes = length of the raw text on the wire.
-// sentAt = the message's ts field (sender clock), used to estimate latency; leave out if unknown.
-export function onMessage(protocol, bytes, sentAt) {
+// The server handled one chat message. bytes = size of the raw text on the wire,
+// processingMs = how long the server took to save and forward it (measured by member 1's router).
+export function onMessage(protocol, bytes, processingMs) {
   const now = Date.now();
   totalMessages++;
   totalBytes += bytes;
@@ -48,10 +45,9 @@ export function onMessage(protocol, bytes, sentAt) {
   }
   recent.push({ time: now, bytes });
   trimWindow(now);
-  // Phone clocks can differ from the laptop's, so ignore impossible values
-  if (sentAt && now - sentAt >= 0 && now - sentAt < 60000) {
-    latencySum += now - sentAt;
-    latencyCount++;
+  if (typeof processingMs === "number" && processingMs >= 0) {
+    processingSum += processingMs;
+    processingCount++;
   }
 }
 
@@ -72,14 +68,6 @@ export function getStats() {
     bytesPerSecond: Math.round(windowBytes / (WINDOW_MS / 1000)),
     messagesByProtocol: { ...messagesByProtocol },
     avgMessageBytes: { json: avgSize("json"), text: avgSize("text") },
-    avgLatencyMs: latencyCount ? +(latencySum / latencyCount).toFixed(1) : null,
+    avgProcessingMs: processingCount ? +(processingSum / processingCount).toFixed(2) : null,
   };
-}
-
-// Add the two metrics routes to member 1's Express app:  addMetricsRoutes(app)
-//   /metrics       -> the live dashboard page
-//   /metrics.json  -> the raw numbers (the page fetches this every second)
-export function addMetricsRoutes(app) {
-  app.get("/metrics", (req, res) => res.sendFile(DASHBOARD_FILE));
-  app.get("/metrics.json", (req, res) => res.json(getStats()));
 }

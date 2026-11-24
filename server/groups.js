@@ -1,10 +1,11 @@
 // groups.js : group chat — create groups, list them, send one message to every member (owner: member 4)
 import { db, saveMessage } from "./db/database.js";
+import { sendTo } from "./connections.js";
 
 // Create a group. members = list of usernames; the owner is always added too.
-// Returns { ok: true } or { ok: false, error: "..." }
+// Returns true if created, false if the name is taken or a member is not a registered user.
 export function createGroup(name, owner, members) {
-  if (!name) return { ok: false, error: "Group name required" };
+  if (!name) return false;
   const everyone = [...new Set([owner, ...members])];          // Set removes repeated names
   // A transaction: either the group AND all members are saved, or nothing is
   db.exec("BEGIN");
@@ -13,11 +14,10 @@ export function createGroup(name, owner, members) {
     const addMember = db.prepare("INSERT OR IGNORE INTO group_members (group_name, username) VALUES (?, ?)");
     for (const user of everyone) addMember.run(name, user);
     db.exec("COMMIT");
-    return { ok: true };
-  } catch (err) {
-    db.exec("ROLLBACK");                                         // undo the half-made group
-    // PRIMARY KEY on name -> group exists; FOREIGN KEY -> a member is not a registered user
-    return { ok: false, error: err.message.includes("FOREIGN") ? "Unknown user in member list" : "Group name already taken" };
+    return true;
+  } catch {
+    db.exec("ROLLBACK");                         // undo the half-made group
+    return false;                                // name taken (PRIMARY KEY) or unknown member (FOREIGN KEY)
   }
 }
 
@@ -34,10 +34,10 @@ export function getGroupMembers(groupName) {
 }
 
 // Send a group message: save it ONCE, then forward it to every online member except the sender.
-// sendTo(username, msg) comes from member 1's connections.js and returns false if that user is offline.
+// send(username, msg) is member 1's sendTo (returns false if that user is offline); tests can pass a fake one.
 // Offline members still get a delivery row, so they receive it on their next login.
 // Returns { ok, duplicate, error? }
-export function sendToGroup(msg, sendTo) {
+export function sendToGroup(msg, send = sendTo) {
   const members = getGroupMembers(msg.group);
   if (!members.includes(msg.from)) return { ok: false, error: "You are not in this group" };
 
@@ -45,6 +45,6 @@ export function sendToGroup(msg, sendTo) {
   const saved = saveMessage(msg, receivers);
   if (!saved) return { ok: true, duplicate: true };              // a resend: already saved and forwarded
 
-  for (const user of receivers) sendTo(user, msg);
+  for (const user of receivers) send(user, msg);
   return { ok: true, duplicate: false };
 }
