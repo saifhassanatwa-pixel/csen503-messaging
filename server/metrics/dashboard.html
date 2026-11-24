@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<!-- dashboard.html : live server metrics, opened at http://<laptop-ip>:3000/metrics (owner: member 4) -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Server metrics</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #111; color: #eee; margin: 0; padding: 24px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    #status { color: #8c8; font-size: 14px; margin-bottom: 20px; }
+    #status.down { color: #e66; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .tile { background: #1d1d1d; border: 1px solid #333; border-radius: 10px; padding: 16px; }
+    .label { font-size: 13px; color: #aaa; }
+    .value { font-size: 32px; font-weight: 600; margin-top: 6px; }
+    .small { font-size: 14px; color: #ccc; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Server metrics</h1>
+  <div id="status">connecting...</div>
+  <div class="grid" id="grid"></div>
+
+  <script>
+    // Each tile: [label, function that turns the stats object into the big value, optional small line]
+    const tiles = [
+      ["Active connections", s => s.activeConnections, s => `peak ${s.peakConnections} · json ${s.connectionsByProtocol.json} · text ${s.connectionsByProtocol.text}`],
+      ["Messages / second", s => s.messagesPerSecond, () => "average over last 5 s"],
+      ["Bytes / second", s => s.bytesPerSecond, () => "average over last 5 s"],
+      ["Total messages", s => s.totalMessages, s => `json ${s.messagesByProtocol.json} · text ${s.messagesByProtocol.text}`],
+      ["Avg message size (bytes)", s => `${s.avgMessageBytes.json} / ${s.avgMessageBytes.text}`, () => "json / text"],
+      ["Avg latency (ms)", s => s.avgLatencyMs ?? "—", () => "send time → server"],
+      ["Uptime", s => formatTime(s.uptimeSeconds), s => `${(s.totalBytes / 1024).toFixed(1)} KB received`],
+    ];
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60), s = sec % 60;
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+
+    // Ask the server for fresh numbers and redraw the tiles
+    async function refresh() {
+      const status = document.getElementById("status");
+      try {
+        const stats = await (await fetch("/metrics.json")).json();
+        document.getElementById("grid").innerHTML = tiles.map(([label, value, small]) =>
+          `<div class="tile"><div class="label">${label}</div>
+           <div class="value">${value(stats)}</div>
+           <div class="small">${small ? small(stats) : ""}</div></div>`).join("");
+        status.textContent = "live · updated " + new Date().toLocaleTimeString();
+        status.className = "";
+      } catch {
+        status.textContent = "server not reachable";
+        status.className = "down";
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 1000);   // update every second
+  </script>
+</body>
+</html>
